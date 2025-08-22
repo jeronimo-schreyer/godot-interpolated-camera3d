@@ -1,46 +1,49 @@
 # Copyright © 2020-present Hugo Locurcio and contributors - MIT License
+# Updated by Jeronimo Schreyer - 2025
 # See `LICENSE.md` included in the source distribution for details.
 @icon("interpolated_camera_3d.svg")
 extends Camera3D
 class_name InterpolatedCamera3D
 
-# The factor to use for asymptotical translation lerping.
-# If 0, the camera will stop moving. If 1, the camera will move instantly.
-@export_range(0, 1, 0.001) var translate_speed := 0.95
 
-# The factor to use for asymptotical rotation lerping.
-# If 0, the camera will stop rotating. If 1, the camera will rotate instantly.
-@export_range(0, 1, 0.001) var rotate_speed := 0.95
+## Base speed for translation interpolation
+@export_range(0, 100, 0.01, "hide_slider") var translate_speed := 5.0
+## Easing curve for translation interpolation
+@export_exp_easing("attenuation") var translate_ease := 1.0
 
-# The factor to use for asymptotical FOV lerping.
-# If 0, the camera will stop changing its FOV. If 1, the camera will change its FOV instantly.
-# Note: Only works if the target node is a Camera3D.
-@export_range(0, 1, 0.001) var fov_speed := 0.95
+## Base speed for rotation interpolation
+@export_range(0, 100, 0.01, "hide_slider") var rotate_speed := 5.0
+## Easing curve for rotation interpolation
+@export_exp_easing("attenuation") var rotate_ease := 1.0
 
-# The factor to use for asymptotical Z near/far plane distance lerping.
-# If 0, the camera will stop changing its Z near/far plane distance. If 1, the camera will do so instantly.
-# Note: Only works if the target node is a Camera3D.
-@export_range(0, 1, 0.001) var near_far_speed := 0.95
+## Base speed for FOV interpolation
+@export_range(0, 100, 0.01, "hide_slider") var fov_speed := 5.0
+## Easing curve for FOV interpolation
+@export_exp_easing("attenuation") var fov_ease := 1.0
+
+## Base speed for Z near/far plane distance interpolation
+@export_range(0, 100, 0.01, "hide_slider") var near_far_speed := 5
+## Easing curve for Z near/far plane distance interpolation
+@export_exp_easing("attenuation") var near_far_ease := 1.0
 
 # The node to target.
 # Can optionally be a Camera3D to support smooth FOV and Z near/far plane distance changes.
 @export var target: Node3D
 
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if not target is Node3D:
 		return
 
-	var translate_factor := 1 - pow(1 - translate_speed, delta * 3.45233)
-	var rotate_factor := 1 - pow(1 - rotate_speed, delta * 3.45233)
-	var target_xform := target.get_global_transform()
+	# ease speeds
+	var translate_factor := ease(translate_speed * delta, translate_ease)
+	var rotate_factor := ease(rotate_speed * delta, rotate_ease)
+	
 	# Interpolate the origin and basis separately so we can have different translation and rotation
 	# interpolation speeds.
-	var local_transform_only_origin := Transform3D(Basis(), get_global_transform().origin)
-	var local_transform_only_basis := Transform3D(get_global_transform().basis, Vector3())
-	local_transform_only_origin = local_transform_only_origin.interpolate_with(target_xform, translate_factor)
-	local_transform_only_basis = local_transform_only_basis.interpolate_with(target_xform, rotate_factor)
-	set_global_transform(Transform3D(local_transform_only_basis.basis, local_transform_only_origin.origin))
+	var local_transform_only_origin = lerp(get_global_position(), target.get_global_position(), translate_factor)
+	var local_transform_only_basis = lerp(get_global_basis(), target.get_global_basis(), rotate_factor)
+	set_global_transform(Transform3D(local_transform_only_basis, local_transform_only_origin))
 
 	if target is Camera3D:
 		var camera := target as Camera3D
@@ -49,8 +52,8 @@ func _process(delta: float) -> void:
 		# and disabled on the Camera3D.
 		if camera.projection == projection:
 			# Interpolate the near and far clip plane distances.
-			var near_far_factor := 1 - pow(1 - near_far_speed, delta * 3.45233)
-			var fov_factor := 1 - pow(1 - fov_speed, delta * 3.45233)
+			var near_far_factor := ease(clampf(near_far_speed * delta, 0, 1), near_far_ease)
+			var fov_factor := ease(clampf(fov_speed * delta, 0, 1), fov_ease)
 			var new_near := lerp(near, camera.near, near_far_factor) as float
 			var new_far := lerp(far, camera.far, near_far_factor) as float
 
